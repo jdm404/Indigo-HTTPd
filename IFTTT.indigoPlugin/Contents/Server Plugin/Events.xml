@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Events>
-	<SupportURL>http://forums.indigodomo.com/viewforum.php?f=216</SupportURL>
+    <SupportURL>https://github.com/jdm404/Indigo-IFTTT/wiki</SupportURL>
     <Event id="requestReceived">
         <Name>HTTP Request Received</Name>
     </Event>

@@ -2,11 +2,21 @@
 # -*- coding: utf-8 -*-
 ####################
 
+try:
+    import indigo
+except ImportError:
+    print "Attachments can only be used from within Indigo"
+    raise ImportError
+
 import sys
 import time
 import os
 import base64
 import logging
+import requests
+import re
+from datetime import datetime
+from dateutil.parser import parse
 
 from ghpu import GitHubPluginUpdater
 
@@ -17,9 +27,9 @@ from urlparse import urlparse, parse_qs
 
 def updateVar(name, value, folder):
     if name not in indigo.variables:
-        indigo.variable.create(name, value=value, folder=folder)
+        return indigo.variable.create(name, value=value, folder=folder)
     else:
-        indigo.variable.updateValue(name, value)
+        return indigo.variable.updateValue(name, value)
 
 ########################################
 class MyHTTPServer(HTTPServer):
@@ -31,9 +41,59 @@ class MyHTTPServer(HTTPServer):
 class AuthHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
+
+        # ifttt doesn't send consistent date strings. seriously?
+        date_re = re.compile('^(Jan(uary)?|Feb(ruary)?|Mar(ch)?|Apr(il)?|May|Jun(e)?|Jul(y)?|Aug(ust)?|Sep(tember)?|Oct(ober)?|Nov(ember)?|Dec(ember)?)\s+[0-9]{1,2},?\s+[0-9]{2,4}')
+
         self.logger = logging.getLogger("Plugin.AuthHandler")
         client_host, client_port = self.client_address
         self.logger.debug("AuthHandler: POST from %s:%s to %s" % (str(client_host), str(client_port), self.path))
+
+        post_data = self.rfile.read(int(self.headers.getheader('Content-Length')))
+
+        # self.logger.debug(u"Header dump: \"%s\"" % self.headers)
+
+        self.logger.debug(u"AuthHandler: POST raw data received: \"%s\"" % post_data)
+
+        request = urlparse(self.path)
+
+        if request.path.startswith('/ifttt'):
+            self.logger.info(u"Received HTTP POST from %s" % str(client_host))
+            if len(request.path) > 8:
+                var_prefix = request.path[7:] + "_"
+                # self.logger.debug(u"Prefix: %s" % var_prefix)
+            else:
+                var_prefix = ""
+            query = parse_qs(post_data)
+            for k in query:
+                # TODO: smarten this up to accept an integer so we can use variable id
+                # if re.match('^[0-9]', k):
+                #     # this is a variable id
+                #     pass
+                the_key = str(k.strip())
+                var_name = var_prefix + re.sub('[^a-zA-Z0-9_-]', '_', the_key)
+                var_value = str(query[k][-1].strip())
+                if date_re.match(var_value):
+                    # TODO: make this a toggleable option?
+                    try:
+                        # this could be a date/time string?
+                        parse_attempt = parse(var_value)
+                        date_string = parse_attempt.strftime('%Y-%m-%d %H:%M:%S')
+                        self.logger.debug(u"Converting time string for variable \"%s\": \"%s\" -> \"%s\"" % (the_key, var_value, date_string))
+                        var_value = date_string
+                    except ValueError as e:
+                        self.logger.debug(u"Received unparseable time string for variable \"%s\": \"%s\"" % (the_key,var_value))
+                        pass
+
+                self.logger.info(u"Updating variable \"%s\" with \"%s\"" % (var_name, var_value))
+                y = updateVar(var_name, var_value, indigo.activePlugin.pluginPrefs["folderId"])
+                if var_prefix is not "":
+                    # TODO: make this optional somehow
+                    post_key_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    updateVar(var_prefix + "updated", post_key_time, indigo.activePlugin.pluginPrefs["folderId"])
+        else:
+            # TODO: 404 error?
+            pass
 
         self.send_response(200)
         self.send_header("Content-type", "text/html")
@@ -102,6 +162,16 @@ class Plugin(indigo.PluginBase):
         self.indigo_log_handler.setLevel(self.logLevel)
         self.logger.debug(u"logLevel = " + str(self.logLevel))
 
+        # initialize vars
+        self.updater = None
+        self.updateFrequency= None
+        self.next_update_check = None
+
+        self.authKey = None
+        self.port = None
+        self.my_ip = None
+        self.ifttturl = None
+
 
     def startup(self):
         indigo.server.log(u"Starting HTTPd")
@@ -112,14 +182,29 @@ class Plugin(indigo.PluginBase):
 
         user = self.pluginPrefs.get('httpUser', 'username')
         password = self.pluginPrefs.get('httpPassword', 'password')
+
         self.authKey = base64.b64encode(user + ":" + password)
 
-        self.port = int(self.pluginPrefs.get('httpPort', '5555'))
+        self.port = int(self.pluginPrefs.get('httpPort', '43888'))
+        self.my_ip = self.discoverMyIp()
+        if self.my_ip:
+            self.ifttturl = 'http://' + self.my_ip + ':' + str(self.port) + '/ifttt'
 
-        if "HTTPd" in indigo.variables.folders:
-            myFolder = indigo.variables.folders["HTTPd"]
+            ipaddr = indigo.Dict()
+            ipaddr["address"] = str(self.my_ip)
+            ipaddr["lastcheck"] = int(time.time())
+            ipaddr["url"] = self.ifttturl
+            self.pluginPrefs["ipaddr"] = ipaddr
+
         else:
-            myFolder = indigo.variables.folder.create("HTTPd")
+            self.ifttturl = 'unknown'
+
+        self.logger.debug(u"IFTTT URL should be: %s" % self.ifttturl)
+
+        if "IFTTT" in indigo.variables.folders:
+            myFolder = indigo.variables.folders["IFTTT"]
+        else:
+            myFolder = indigo.variables.folder.create("IFTTT")
         self.pluginPrefs["folderId"] = myFolder.id
 
         self.triggers = {}
@@ -207,6 +292,36 @@ class Plugin(indigo.PluginBase):
             self.logger.debug(u"updateFrequency = " + str(self.updateFrequency))
             self.next_update_check = time.time()
 
+    def discoverMyIp(self):
+        self.logger.debug(u"Attempting to discover my external IP address...")
+        try:
+            req = requests.get("http://checkip.dyndns.com", timeout=30.0)
+        except requests.exceptions.RequestException as e:
+            self.logger.error(u"Unable to discover external IP address by polling http://checkip.dyndns.com/")
+            return None
+
+        ipv4_address = re.compile('[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
+        ipv4 = ipv4_address.search(req.text)
+        if not ipv4:
+            ipv6_address = re.compile(
+                    '(?:(?:[0-9A-Fa-f]{1,4}:){6}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))|::(?:[0-9A-Fa-f]{1,4}:){5}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))|(?:[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:){4}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))|(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:){3}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))|(?:(?:[0-9A-Fa-f]{1,4}:){,2}[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:){2}(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))|(?:(?:[0-9A-Fa-f]{1,4}:){,3}[0-9A-Fa-f]{1,4})?::[0-9A-Fa-f]{1,4}:(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))|(?:(?:[0-9A-Fa-f]{1,4}:){,4}[0-9A-Fa-f]{1,4})?::(?:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}|(?:(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]))|(?:(?:[0-9A-Fa-f]{1,4}:){,5}[0-9A-Fa-f]{1,4})?::[0-9A-Fa-f]{1,4}|(?:(?:[0-9A-Fa-f]{1,4}:){,6}[0-9A-Fa-f]{1,4})?::)')
+            ipv6 = ipv6_address.search(req.text)
+            if ipv6:
+                ip = "[" + ipv6.group() + "]"
+            else:
+                # uh oh.
+                ip = None
+        else:
+            ip = ipv4.group()
+
+        if ip:
+            self.logger.debug(u"Discovered IP address: %s" % ip)
+        else:
+            self.logger.debug(u"Unable to discover IP address.")
+        return ip
+
+    def urlConfig(self, values_dict, type_id):
+        pass
 
     ########################################
     # Menu Methods
