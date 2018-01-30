@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <PluginConfig>
-    <SupportURL>https://github.com/jdm404/Indigo-IFTTT/wiki/Configuration</SupportURL>
+    <SupportURL>https://github.com/xtex404/Indigo-IFTTT/wiki/Configuration</SupportURL>
 
     <Field id="httpPort" type="textfield"  defaultValue="43888">
         <Label>Port Number:</Label>
