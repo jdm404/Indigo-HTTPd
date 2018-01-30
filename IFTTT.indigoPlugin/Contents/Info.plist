@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>PluginVersion</key>
-    <string>0.1.0</string>
+    <string>0.0.1</string>
     <key>ServerApiVersion</key>
     <string>2.0</string>
     <key>IwsApiVersion</key>
@@ -23,5 +23,12 @@
             <string>https://github.com/xtex404/Indigo-IFTTT/wiki</string>
         </dict>
     </array>
+    <key>GithubInfo</key>
+    <dict>
+        <key>GithubRepo</key>
+        <string>Indigo-IFTTT</string>
+        <key>GithubUser</key>
+        <string>xtex404</string>
+    </dict>
 </dict>
 </plist>
