@@ -163,3 +163,4 @@ gen
 
 test*.py
 scratch*.py
+/.gtm/
