@@ -160,3 +160,6 @@ ENV/
 *.iml
 out
 gen
+
+test*.py
+scratch*.py

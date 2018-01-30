@@ -71,7 +71,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                 #     # this is a variable id
                 #     pass
                 the_key = str(k.strip())
-                var_name = var_prefix + re.sub('[^a-zA-Z0-9_-]', '_', the_key)
+                var_name = (var_prefix + re.sub('[^a-zA-Z0-9_-]', '_', the_key)).lower()
                 var_value = str(query[k][-1].strip())
                 if date_re.match(var_value):
                     # TODO: make this a toggleable option?
@@ -79,14 +79,14 @@ class AuthHandler(BaseHTTPRequestHandler):
                         # this could be a date/time string?
                         parse_attempt = parse(var_value)
                         date_string = parse_attempt.strftime('%Y-%m-%d %H:%M:%S')
-                        self.logger.debug(u"Converting time string for variable \"%s\": \"%s\" -> \"%s\"" % (the_key, var_value, date_string))
+                        self.logger.debug(u"Converting time string for variable \"%s\": \"%s\" -> \"%s\"" % (var_name, var_value, date_string))
                         var_value = date_string
                     except ValueError as e:
-                        self.logger.debug(u"Received unparseable time string for variable \"%s\": \"%s\"" % (the_key,var_value))
+                        self.logger.debug(u"Received unparseable time string for variable \"%s\": \"%s\"" % (var_name, var_value))
                         pass
 
                 self.logger.info(u"Updating variable \"%s\" with \"%s\"" % (var_name, var_value))
-                y = updateVar(var_name, var_value, indigo.activePlugin.pluginPrefs["folderId"])
+                updateVar(var_name, var_value, indigo.activePlugin.pluginPrefs["folderId"])
                 if var_prefix is not "":
                     # TODO: make this optional somehow
                     post_key_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -263,6 +263,7 @@ class Plugin(indigo.PluginBase):
 
     ####################
     def validatePrefsConfigUi(self, valuesDict):
+        # TODO: validate everything passed in. :P
         self.logger.debug(u"validatePrefsConfigUi called")
         errorDict = indigo.Dict()
 
@@ -272,7 +273,8 @@ class Plugin(indigo.PluginBase):
 
         httpPort = int(valuesDict['httpPort'])
         if httpPort < 1024:
-            errorDict['httpPort'] = u"HTTP Port Number invalid"
+            # TODO: check to see if this port is actually available by trying to bind to it
+            errorDict['httpPort'] = u"HTTP Port Number invalid - enter a number between 1024 and 65535"
 
         if len(errorDict) > 0:
             return (False, valuesDict, errorDict)
@@ -320,8 +322,44 @@ class Plugin(indigo.PluginBase):
             self.logger.debug(u"Unable to discover IP address.")
         return ip
 
-    def urlConfig(self, values_dict, type_id):
-        pass
+    def validateDeviceConfigUi(self, values, type_id, device_id):
+        # TODO: validate everything coming in
+        self.logger.debug(u"Entering validateDeviceConfigUi: typeId: %s  devId: %s" % (type_id, str(device_id)))
+        errors_dict = indigo.Dict()
+        errors_dict['showAlertText'] = ""
+        if type_id == "iftttSender":
+            # TODO: create this address from the URL in the main config
+            values['address'] = "kjahsdkashdkjh/" + values['iftttEventName']
+
+        return True, values
+
+    def deviceStartComm(self, device):
+        self.logger.debug(u"Entering deviceStartComm")
+        device.stateListOrDisplayStateIdChanged()
+        device.updateStateOnServer('status', value='initializing', clearErrorState=True)
+        device.updateStateOnServer('status', value='available', clearErrorState=True)
+        device.updateStateImageOnServer(indigo.kStateImageSel.SensorOn)
+        return True
+
+    def deviceStopComm(self, device):
+        self.logger.debug(u"Entering deviceStopComm")
+        device.updateStateOnServer('status', value='disabled', clearErrorState=True)
+        device.updateStateImageOnServer(indigo.kStateImageSel.Error)
+        return True
+
+    def didDeviceCommPropertyChange(self, orig_device, new_device):
+        # self.logger.debug(u"Entering didDeviceCommPropertyChange")
+        return False
+
+    def deviceUpdate(self, orig_device, new_device):
+        self.logger.debug(u"Entering deviceUpdated")
+        return True
+
+    def deviceDeleted(self, device):
+        self.logger.debug(u"Entering deviceDeleted")
+        return True
+
+
 
     ########################################
     # Menu Methods

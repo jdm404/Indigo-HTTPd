@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<Devices>
+    <Device type="custom" id="iftttSender">
+        <Name>IFTTT Maker Sender</Name>
+        <ConfigUI>
+
+            <Field id="iftttEventName" type="textfield" defaultValue="myEvent">
+                <Label>IFTTT Event Name:</Label>
+            </Field>
+
+            <Field id="sep0" type="separator"/>
+
+            <Field id="value1" type="menu">
+                <Label>Variable to send as value1:</Label>
+                <List class="indigo.variables" filter="" />
+            </Field>
+            <Field id="value2" type="menu">
+                <Label>Variable to send as value2:</Label>
+                <List class="indigo.variables" filter="" />
+            </Field>
+            <Field id="value3" type="menu">
+                <Label>Variable to send as value3:</Label>
+                <List class="indigo.variables" filter="" />
+            </Field>
+            <Field id="sep1" type="separator"/>
+
+            <Field id="trigger1" type="checkbox" defaultValue="true">
+                <Label>Trigger on Variable 1 Change?</Label>
+            </Field>
+            <Field id="trigger2" type="checkbox" defaultValue="false">
+                <Label>Trigger on Variable 2 Change?</Label>
+            </Field>
+            <Field id="trigger3" type="checkbox" defaultValue="false">
+                <Label>Trigger on Variable 3 Change?</Label>
+            </Field>
+            <Field id="address" type="textfield" hidden="true"/>
+        </ConfigUI>
+        <States>
+            <State id="status">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Status</TriggerLabel>
+                <ControlPageLabel>Status</ControlPageLabel>
+            </State>
+        </States>
+        <UiDisplayStateId>status</UiDisplayStateId>
+    </Device>
+</Devices>

@@ -1,11 +1,12 @@
 <?xml version="1.0"?>
 <PluginConfig>
     <SupportURL>https://github.com/jdm404/Indigo-IFTTT/wiki/Configuration</SupportURL>
+
     <Field id="httpPort" type="textfield"  defaultValue="43888">
         <Label>Port Number:</Label>
     </Field>
-    <Field id="ifttturl" type="textfield">
-        <Label>URL:</Label>
+    <Field id="iftttMakerUrl" type="textfield" defaultValue="https://maker.ifttt.com/use/UNIQUE_IDENTIFIER">
+        <Label>Default IFTTT Maker URL:</Label>
     </Field>
     <Field id="sep0" type="separator"/>
     <Field id="updateFrequency" type="textfield" defaultValue="24">
