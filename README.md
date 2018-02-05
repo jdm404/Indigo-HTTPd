@@ -1,7 +1,5 @@
-# HTTPd
+# IFTTT
 
-Plugin for the Indigo Home Automation system.
+Much tighter integration with IFTTT web hooks than the basic HTTP methods. Spawns a private web server instance for now, hopefully will be able add SSL support using Lets Encrypt. 
 
-Runs an HTTP server inside Indigo.
-
-Configure port number, username, and password in the plugin configuration dialog.  You'll need to set up port forwarding on your router to the specified port.  Only ports > 1024 can be used.
+Preliminary is working now, but it's not what I'd like (it just updates variables), and there's no docs. Much more work needed before this is useful for anyone other than me.
